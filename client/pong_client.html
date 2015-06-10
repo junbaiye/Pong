@@ -1,0 +1,445 @@
+﻿<!--Jeney Lao - 83093656
+    Junbai Ye - 87724993
+
+	MILESTONE 5
+
+	·         Milestone 1:
+	The physics engine that tracks the ball’s movement was calculated by a code that 
+	Junbai included. Jeney worked on recording the connected player’s ID. We both had 
+	the IP address and port of the game server to connect. Jeney added the text field 
+	to enter the user’s game ID. Jeney also kept track of the number of consecutive 
+	hits the player makes, along with the number of hits versus the number of total 
+	times the ball was presented to the player; she made this display on the screen. 
+	Junbai worked on denying server to incoming requests to start a game when one 
+	game is already in progress.
+
+	·         Milestone 2:
+	From Milestone 1, the text fields to enter the IP address and port of the game 
+	server to connect to, along with the text field to enter the user’s game ID, 
+	were already present. The scoreboard, implemented by Jeney, shows the IDs and 
+	scores of the two players. However, the scoreboard does not actually work with 
+	two players. One of the player’s is played by the computer, which is not what 
+	this milestone demands. Junbai incorporate a physics engine that tracks the ball’s 
+	movement and tried to implement stopping the game when one of the players leave, 
+	but it wasn’t successful during this time.
+
+	·         Milestone 3:
+	Junbai successfully coded the server to stop the game from running when one of 
+	the players leave. The players can also play against each other (worked on by 
+	both Jeney and Junbai.) Junbai also added artificial latency to each message 
+	being sent or received. It was random, with there being 1 to 10 seconds delay 
+	to each message. Jeney calculated the latency between the server and the clients, 
+	although it wasn’t completely accurate.
+
+	·         Milestone 4:
+	Junbai improved the pong ball’s physics and movement. The latency calculated by 
+	Jeney wasn’t completely accurate, but it did not need synchronization between 
+	machines since it did not calculate a result between two different system times.
+
+	·         Milestone 5:
+	Jeney improved the latency calculated between the server and the clients. It is 
+	more accurate than the latency calculated in Milestone 4.
+
+	Jeney and Junbai both worked on the summary together.
+
+    -->
+
+<!doctype html>
+<html>
+<head>
+	<meta charset='UTF-8' />
+	<style>
+		input, textarea {border:1px solid #CCC;margin:0px;padding:0px}
+
+        #ip {line-height:20px}
+        #port {line-height:20px}
+		#body {max-width:800px;margin:auto}
+		#log {width:100%;height:400px}
+		#message {width:100%;line-height:20px}
+	</style>
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js"></script>
+	<script src="fancywebsocket.js"></script>
+	<script>
+	    var Server;
+	    var counter = 0;
+	    var playerNum = 0;
+	    var player1Pos = 175;
+	    var player2Pos = 175;
+
+	    var player1Score = 0;
+	    var player2Score = 0;
+
+	    var clientID = "";
+
+	    var startTime1 = new Date();
+	    var startTime2 = new Date();
+	    var endTime1 = new Date();
+	    var endTime2 = new Date();
+	    var ping = 0;
+	    var pingTotal = 0;
+	    var pingCount = 0;
+	    var pingAverage = 0;
+
+	    var ballxs = 0;
+	    var ballys = 0;
+
+
+	    function log(text) {
+	        $log = $('#log');
+	        //Add text to log
+	        $log.append(($log.val() ? "\n" : '') + text);
+	        //Autoscroll
+	        $log[0].scrollTop = $log[0].scrollHeight - $log[0].clientHeight;
+	    }
+
+	    function send(text) {
+	        Server.send('message', text);
+	    }
+
+	    function connect() {
+	        log('Connecting...');
+	        Server = new FancyWebSocket('ws://' + document.getElementById('ip').value + ':' + document.getElementById('port').value);
+
+	        $('#message').keypress(function (e) {
+	            if (e.keyCode == 13 && this.value) {
+	                log(document.getElementById('gameID').value + " says: " + this.value);
+	                send(this.value);
+
+	                $(this).val('');
+	            }
+	        });
+
+	        //Let the user know we're connected
+	        Server.bind('open', function () {
+	            document.getElementById("cntBtn").disabled = true;
+	            log("Connected.");
+	            Server.send('message', "NAME:" + document.getElementById('gameID').value);
+	        });
+
+	        //OH NOES! Disconnection occurred.
+	        Server.bind('close', function (data) {
+	            document.getElementById("cntBtn").disabled = false;
+	            log("Disconnected.");
+	        });
+
+	        //Log any messages sent from server
+	        Server.bind('message', function (payload) {
+	            var data = payload.split(":");
+				if (data[0] == "go1") 
+			    {
+			        ball = new Ball(Number(data[1]), Number(data[2]), Number(data[3]), Number(data[4]));
+			        playerNum = 1;
+			    }
+				else if (data[0] == "go2")
+				{
+					ball = new Ball(Number(data[1]), Number(data[2]), Number(data[3]), Number(data[4]));
+					playerNum = 2;
+				}
+				else if (data[0] == "sum1") 
+				{
+	                playerNum = 1
+	                player1Score = Number(data[1]);
+	                player2Score = Number(data[2]);
+	                clientID = data[3];
+	            }
+	            else if (data[0] == "sum2") 
+				{
+	                playerNum = 2
+	                player1Score = Number(data[1]);
+	                player2Score = Number(data[2]);
+	                clientID = data[3];
+	            }
+				else if(data[0] == "paddle")
+				{
+					if(data[1] == "1")
+						player1Pos = Number(data[2]);
+					else if(data[1] == "2")
+						player2Pos = Number(data[2]);
+				}
+				else if (data[0] == "ball")
+				{
+					ball = new Ball(Number(data[1]), Number(data[2]), Number(data[3]), Number(data[4]));		
+				}
+				else if (data[0] == "T")
+				{
+				    endTime2 = new Date();
+				    ping = Math.abs(((endTime2.getTime() - data[2]) - data[1]) / 2);
+				    pingTotal += ping;
+				    pingCount++;
+                   
+				    if (pingCount == 50) {
+				        pingAverage = pingTotal / pingCount;
+				        pingTotal = 0;
+				        pingCount = 0;
+				        log("Your ping is: " + pingAverage);
+				    }
+				}
+				else if (data[0] == "T1")
+				{
+				    var T1 = new Date();
+				    var T2 = new Date();
+				    var T2minusT1 = T2.getTime() - T1.getTime();
+				    Server.send('message', "T2:" + T2minusT1);
+				}
+	            else
+				{
+	                log(payload);
+	            }
+
+	            if (data[0] == "stop") {
+	                ball = new Ball(200, 200, 0, 0);
+	            }
+
+
+	        });
+
+	        Server.connect();
+
+	        var animate = window.requestAnimationFrame || window.webkitRequestAnimationFrame || window.mozRequestAnimationFrame || function (callback) {
+	            window.setTimeout(callback, 1000 / 60)
+	        };
+	        var canvas = document.createElement("canvas");
+	        var width = 400;
+	        var height = 400;
+	        canvas.width = width;
+	        canvas.height = height;
+	        var context = canvas.getContext('2d');
+	        var player1 = new Player1();
+	        var player2 = new Player2();
+	        var ball = new Ball(200, 200, 0,0);
+	        var score = 0;
+	        var totalScore = 0;
+
+	        var keysDown = {};
+	        var playerNum = 0;
+	        var player1Pos = 175;
+	        var player2Pos = 175;
+	        var otherplayer = 175;
+
+	        var player1Score = 0;
+	        var player2Score = 0;
+
+	        var startTime1 = new Date();
+	        var startTime2 = new Date();
+	        var endTime1 = new Date();
+	        var endTime2 = new Date();
+
+	        var render = function () {
+	            context.fillStyle = "#CCFF99";
+	            context.fillRect(0, 0, width, height);
+	            player1.render();
+	            player2.render();
+	            ball.render();
+	            context.font = "20px Georgia";
+	            context.fillText(player1Score + ":" + player2Score, 187, 50);
+
+	            if (playerNum == 1) {
+	                context.fillText(document.getElementById('gameID').value, 0, 50);
+	                context.fillText(clientID, 330, 50);
+	            }
+	            else if (playerNum == 2) {
+	                context.fillText(document.getElementById('gameID').value, 330, 50);
+	                context.fillText(clientID, 0, 50);
+	            }
+	        };
+
+	        var update = function () {
+	            player1.update(player1Pos);
+	            player2.update(player2Pos);
+	            if (playerNum == 1) {
+	                startTime1 = new Date();
+	            }
+	            if (playerNum == 2) {
+	                startTime2 = new Date();
+	            }
+	            ball.update(player1.paddle, player2.paddle);
+	        };
+
+	        var step = function () {
+	            update();
+	            render();
+	            animate(step);
+	        };
+
+	        function Paddle(x, y, width, height) {
+	            this.x = x;
+	            this.y = y;
+	            this.width = width;
+	            this.height = height;
+	            this.x_speed = 0;
+	            this.y_speed = 0;
+	        }
+
+	        Paddle.prototype.render = function () {
+	            context.fillStyle = "#0000FF";
+	            context.fillRect(this.x, this.y, this.width, this.height);
+	        };
+
+	        Paddle.prototype.move = function (x, y) {
+	            this.x += x;
+	            this.y += y;
+	            this.x_speed = x;
+	            this.y_speed = y;
+	            if (this.y < 0) {
+	                this.y = 0;
+	                this.y_speed = 0;
+	            } else if (this.y + this.height > 400) {
+	                this.y = 400 - this.height;
+	                this.y_speed = 0;
+	            }
+	        };
+
+	        function Player1() {
+	            this.paddle = new Paddle(10, 175, 10, 50);
+	        }
+
+	        Player1.prototype.render = function () {
+	            this.paddle.render();
+	        };
+
+	        Player1.prototype.update = function (player1Pos) {
+	            if (playerNum == 2) {
+					var y_pos = player1Pos;
+					var diff = -((this.paddle.y) - y_pos);
+			        if (diff < 0 && diff < -4) {
+			            diff = -5;
+			        } else if (diff > 0 && diff > 4) {
+			            diff = 5;
+			        }
+			        this.paddle.move(0, diff);
+			        if (this.paddle.y < 0) {
+			            this.paddle.y = 0;
+			        } else if (this.paddle.y + this.paddle.height > 400) {
+			            this.paddle.y = 400 - this.paddle.height;
+			        }
+	            }
+	            else if (playerNum == 1) {
+	                for (var key in keysDown) {
+	                    var value = Number(key);
+	                    if (value == 38) {
+	                        this.paddle.move(0, -4);
+	                        startTime1 = new Date();
+	                        Server.send('message', "1:" + this.paddle.y + ":" + startTime1.getTime());
+	                        Server.send('message', "1s:" + this.paddle.y_speed);
+	                    } else if (value == 40) {
+	                        this.paddle.move(0, 4);
+	                        startTime1 = new Date();
+	                        Server.send('message', "1:" + this.paddle.y + ":" + startTime1.getTime());
+	                        Server.send('message', "1s:" + this.paddle.y_speed);
+	                    } else {
+	                        this.paddle.move(0, 0);
+	                    }
+	                }
+	            }
+	        };
+
+	        function Player2() {
+	            this.paddle = new Paddle(width - 20, 175, 10, 50);
+	        }
+
+	        Player2.prototype.render = function () {
+	            this.paddle.render();
+	        };
+
+	        Player2.prototype.update = function (player2Pos) {
+	            if (playerNum == 1) {
+					var y_pos = player2Pos;
+			        var diff = -((this.paddle.y) - y_pos);
+			        if (diff < 0 && diff < -4) {
+			            diff = -5;
+			        } else if (diff > 0 && diff > 4) {
+			            diff = 5;
+			        }
+			        this.paddle.move(0, diff);
+			        if (this.paddle.y < 0) {
+			            this.paddle.y = 0;
+			        } else if (this.paddle.y + this.paddle.height > 400) {
+			            this.paddle.y = 400 - this.paddle.height;
+			        }
+	            }
+	            else if (playerNum == 2) {
+	                for (var key in keysDown) {
+	                    var value = Number(key);
+	                    if (value == 38) {
+	                        this.paddle.move(0, -4);
+	                        startTime2 = new Date();
+
+	                        Server.send('message', "2:" + this.paddle.y + ":" + startTime2.getTime());
+	                        Server.send('message', "2s:" + this.paddle.y_speed);
+	                    } else if (value == 40) {
+	                        this.paddle.move(0, 4);
+	                        startTime2 = new Date();
+	                        Server.send('message', "2:" + this.paddle.y + ":" + startTime2.getTime());
+	                        Server.send('message', "2s:" + this.paddle.y_speed);
+	                    } else {
+	                        this.paddle.move(0, 0);
+
+	                    }
+	                }
+	            }
+	        };
+
+	        function Ball(x, y, xs, ys) {
+	            this.x = x;
+	            this.y = y;
+	            this.xs = xs;
+	            this.xy = ys;
+	            this.x_speed = xs;
+	            this.y_speed = ys;
+	        }
+
+	        Ball.prototype.render = function () {
+	            context.beginPath();
+	            context.arc(this.x, this.y, 5, 2 * Math.PI, false);
+	            context.fillStyle = "#000000";
+	            context.fill();
+	        };
+
+	        Ball.prototype.update = function (paddle1, paddle2) {
+			    this.x += this.x_speed;
+			    this.y += this.y_speed;
+			    var top_x = this.x - 5;
+			    var top_y = this.y - 5;
+			    var bottom_x = this.x + 5;
+			    var bottom_y = this.y + 5;
+				
+				if (this.y - 5 < 0) {
+			        //Server.send('message', "ball:btm:" + this.x + ":" + this.y + ":" + this.x_speed + ":" + this.y_speed + ":0:");
+			        //hit bottom
+			        this.x = 5;
+			        this.x_speed = -this.x_speed;
+			    } else if (this.y + 5 > 400) {
+			        //Server.send('message', "ball:top:" + this.x + ":" + this.y + ":" + this.x_speed + ":" + this.y_speed + ":0:");
+			        //hit top
+			        this.x = 395;
+			        this.x_speed = -this.x_speed;
+			    }
+	        };
+
+	        document.body.appendChild(canvas);
+	        animate(step);
+
+	        window.addEventListener("keydown", function (event) {
+	            keysDown[event.keyCode] = true;
+	        });
+
+	        window.addEventListener("keyup", function (event) {
+	            delete keysDown[event.keyCode];
+	        });
+
+	    }
+	</script>
+</head>
+
+<body>
+	<div id='body'>
+        Server IP: <input type='text' id='ip' name='ip'>
+        Server Port: <input type='text' id='port' name='port'>
+        Game ID: <input type='text' id='gameID' name='gameID'>
+        <button type="button" id='cntBtn' onclick="connect();">Connect</button>
+		<textarea id='log' name='log' readonly='readonly'></textarea><br/>
+        <input type='text' id='message' name='message' />
+	</div>
+</body>
+
+</html>
